@@ -1,6 +1,9 @@
 //Serial Monitor Varible Input for use with Adafruit Capacitive Arduino Touchscreen shield
 //Written by Joseph Schroedl
 //August 25-26, 2017
+//
+//Updates:
+//8/31/2017 - John Schroedl - Added control keyword processing for two-way communcation.
 
 #include <Adafruit_GFX.h>
 #include <SPI.h>
@@ -9,7 +12,13 @@
 #include <Adafruit_FT6206.h>
 
 bool verboseMode = false;
-long baudRate = 2000000; //If I assign baud rate this way the whole code slows down
+
+long baudRate = 256000; //If I assign baud rate this way the whole code slows down
+
+bool OnorOff = false;
+bool CountingUp = true;
+int count = 0;
+
 long serialDelay = 100;
 long tempSerialDelay = 0;
 
@@ -29,6 +38,10 @@ Adafruit_GFX_Button Number8 = Adafruit_GFX_Button();
 Adafruit_GFX_Button Number9 = Adafruit_GFX_Button();
 Adafruit_GFX_Button NumberDelete = Adafruit_GFX_Button();
 
+// The currently-pressed button.
+Adafruit_GFX_Button* pressedButton = NULL; 
+
+// The touchscreen
 Adafruit_FT6206 ts = Adafruit_FT6206();
 
 #define TFT_CS 10
@@ -39,22 +52,20 @@ int OnOffButtonXPos = 0;
 int OnOffButtonYPos = 0;
 int OnOffButtonWidth = 120;
 int OnOffButtonHeight = 120;
-bool OnorOff = false;
-bool CountingUp = true;
-int count = 0;
 
 int SerialSpeedButtonXPos = 200;
 int SerialSpeedButtonYPos = 0;
 int SerialSpeedButtonWidth = 120;
 int SerialSpeedButtonHeight = 120;
 
-
-void clearScreen() {
+void clearScreen()
+{
 	tft.fillScreen(ILI9341_BLACK);
 	if (verboseMode) { Serial.println("Cleared Screen"); }
 }
 
-void drawOffButton() {
+void drawOffButton() 
+{
 	OffButton.drawButton();
 	/*tft.fillRect(OnOffButtonXPos, OnOffButtonYPos, OnOffButtonWidth, OnOffButtonHeight, ILI9341_RED);
 	tft.setCursor((OnOffButtonWidth / 10), (OnOffButtonHeight / 3.5));
@@ -63,7 +74,8 @@ void drawOffButton() {
 	tft.println("OFF");*/
 }
 
-void drawOnButton() {
+void drawOnButton() 
+{
 	OnButton.drawButton();
 	/*tft.fillRect(OnOffButtonXPos, OnOffButtonYPos, OnOffButtonWidth, OnOffButtonHeight, ILI9341_GREEN);
 	tft.setCursor((OnOffButtonWidth / 7), (OnOffButtonHeight / 5));
@@ -72,7 +84,8 @@ void drawOnButton() {
 	tft.println("ON");*/
 }
 
-void checkOperationStatus() {
+void checkOperationStatus() 
+{
 	if (OnorOff == true)
 	{
 		drawOnButton();
@@ -87,7 +100,8 @@ void checkOperationStatus() {
 	}
 }
 
-void drawSerialSpeedButton() {
+void drawSerialSpeedButton() 
+{
 	serialSetSpeedButton.drawButton();
 	/*tft.fillRect(SerialSpeedButtonXPos, SerialSpeedButtonYPos, SerialSpeedButtonWidth, SerialSpeedButtonHeight, ILI9341_LIGHTGREY);
 	tft.setCursor(SerialSpeedButtonXPos + (SerialSpeedButtonWidth / 10), SerialSpeedButtonYPos + (SerialSpeedButtonHeight / 3.5));
@@ -99,39 +113,31 @@ void drawSerialSpeedButton() {
 	tft.print("Rate");*/
 }
 
-void drawNumberPad() {
+void drawNumberPad() 
+{
 	Number0.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 0 Button"); }
 	Number1.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 1 Button"); }
 	Number2.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 2 Button"); }
 	Number3.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 3 Button"); }
 	Number4.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 4 Button"); }
 	Number5.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 5 Button"); }
 	Number6.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 6 Button"); }
 	Number7.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 7 Button"); }
 	Number8.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 8 Button"); }
 	Number9.drawButton();
-	if (verboseMode) { Serial.println("Drew Number 9 Button"); }
 	NumberDelete.drawButton();
-	if (verboseMode) { Serial.println("Drew Number Delete Button"); }
 }
 
-void drawSpeedMeterLabel() {
+void drawSpeedMeterLabel() 
+{
 	tft.setCursor(130, 5);
 	tft.setTextColor(ILI9341_BLUE);
 	tft.setTextSize(2);
 	tft.print("Speed:");
 }
 
-void drawSpeedMeter() {
+void drawSpeedMeter() 
+{
 	tft.fillRect(120, 25, 80, 14, ILI9341_BLACK);
 	tft.setCursor(120, 25);
 	tft.setTextColor(ILI9341_BLUE);
@@ -140,14 +146,16 @@ void drawSpeedMeter() {
 	tft.print("ms");
 }
 
-void drawTempSpeedLabel() {
+void drawTempSpeedLabel() 
+{
 	tft.setCursor(130, 80);
 	tft.setTextColor(ILI9341_ORANGE);
 	tft.setTextSize(2);
 	tft.print("Temp:");
 }
 
-void drawTempSpeed() {
+void drawTempSpeed() 
+{
 	tft.fillRect(120, 100, 80, 14, ILI9341_BLACK);
 	tft.setCursor(120, 100);
 	tft.setTextColor(ILI9341_ORANGE);
@@ -156,7 +164,8 @@ void drawTempSpeed() {
 	tft.print("ms");
 }
 
-void setup() {
+void setup() 
+{
 	Serial.begin(baudRate);
 
 	tft.begin();
@@ -198,94 +207,130 @@ void setup() {
 	if (verboseMode) { Serial.println("Done Drawing Setup Buttons"); }
 }
 
-void loop() {
+// Test all the buttons for a tap and return a 
+// pointer to the button tapped or NULL if no
+// button was hit.
+Adafruit_GFX_Button* buttonHitTest(TS_Point p) 
+{ 
+  if (OnButton.contains(p.x, p.y)) {
+    return &OnButton;
+  }
+  else if (OffButton.contains(p.x, p.y)) {
+    return &OffButton;
+  }
+  else if (serialSetSpeedButton.contains(p.x, p.y)) {
+    return &serialSetSpeedButton;
+  }
+  else if (Number0.contains(p.x, p.y)) {
+    return &Number0;
+  }
+  else if (Number1.contains(p.x, p.y)) {
+    return &Number1;
+  }
+  else if (Number2.contains(p.x, p.y)) {
+    return &Number2;
+  }
+  else if (Number3.contains(p.x, p.y)) {
+    return &Number3;
+  }
+  else if (Number4.contains(p.x, p.y)) {
+    return &Number4;
+  }
+  else if (Number5.contains(p.x, p.y)) {
+    return &Number5;
+  }
+  else if (Number6.contains(p.x, p.y)) {
+    return &Number6;
+  }
+  else if (Number7.contains(p.x, p.y)) {
+    return &Number7;
+  }
+  else if (Number8.contains(p.x, p.y)) {
+    return &Number8;
+  }
+  else if (Number9.contains(p.x, p.y)) {
+    return &Number9;
+  }
+  else if (NumberDelete.contains(p.x, p.y)) {
+    return &NumberDelete;
+  } 
+  else {
+    return NULL; 
+  }
+}
+
+// Transform touch point to screen coordinate. 
+TS_Point transformTouchPoint(TS_Point const & touchPoint)
+{
+    // Swap x & y
+    TS_Point screenPoint = touchPoint;
+    screenPoint.x = touchPoint.y;
+    screenPoint.y = touchPoint.x;
+    
+    // Reverse x: [0,320] -> [320,0]
+    screenPoint.x = map(screenPoint.x, 0, 320, 320, 0);
+
+    return screenPoint;  
+}
+
+void turnOnOrOff(bool newState)
+{
+  OnorOff = newState;
+  checkOperationStatus();
+  count = 0;
+  CountingUp = true;
+}
+
+void setSpeed(int value) 
+{
+  serialDelay = value;
+  drawSpeedMeter();
+}
+
+// Read an incoming command from the serial port.
+void readCommand()
+{
+  String cmd = Serial.readStringUntil('\n');
+  cmd.replace('\r','\0'); // If it was terminated with CRLF remove it.
+ 
+  if (verboseMode) { Serial.println("Got command: " + cmd); }
+
+  if (cmd == "ON") {
+    turnOnOrOff(true);
+  }
+  else if (cmd == "OFF") {
+    turnOnOrOff(false);
+  }
+  else if (cmd.startsWith("SPEED ")) {
+    int value = cmd.substring(6).toInt();
+    if (value >= 0)
+      setSpeed(value);
+  }
+}
+
+void loop() 
+{   
+  if (Serial.available() > 0)
+    readCommand();
+
 	if (ts.touched()) {
-		// Retrieve a point
-		TS_Point p = ts.getPoint();
-		TS_Point p2 = p;
-		// rotate coordinate system
-		// flip it around to match the screen.
-		//p.y = map(p.y, 0, 320, 320, 0);
-		p.x = p2.y;
-		p.y = p2.x;
-		p.x = map(p.x, 0, 320, 320, 0);
-		/*if (verboseMode) {
-			Serial.print("X: ");
-			Serial.print(p.x);
-			Serial.print(", ");
-			Serial.print("Y: ");
-			Serial.print(p.y);
-			Serial.println();
-		}*/
-		if (OnButton.contains(p.x, p.y)) {
-			OnButton.press(true);
-		}
-		else if (OffButton.contains(p.x, p.y)) {
-			OffButton.press(true);
-		}
-		else if (serialSetSpeedButton.contains(p.x, p.y)) {
-			serialSetSpeedButton.press(true);
-			if (verboseMode) { Serial.println("Serial Speed Button Pressed"); }
-		}
-		else if (Number0.contains(p.x, p.y)) {
-			Number0.press(true);
-		}
-		else if (Number1.contains(p.x, p.y)) {
-			Number1.press(true);
-		}
-		else if (Number2.contains(p.x, p.y)) {
-			Number2.press(true);
-		}
-		else if (Number3.contains(p.x, p.y)) {
-			Number3.press(true);
-		}
-		else if (Number4.contains(p.x, p.y)) {
-			Number4.press(true);
-		}
-		else if (Number5.contains(p.x, p.y)) {
-			Number5.press(true);
-		}
-		else if (Number6.contains(p.x, p.y)) {
-			Number6.press(true);
-		}
-		else if (Number7.contains(p.x, p.y)) {
-			Number7.press(true);
-		}
-		else if (Number8.contains(p.x, p.y)) {
-			Number8.press(true);
-		}
-		else if (Number9.contains(p.x, p.y)) {
-			Number9.press(true);
-		}
-		else if (NumberDelete.contains(p.x, p.y)) {
-			NumberDelete.press(true);
-		}
-	}
-	else
-	{
-		OnButton.press(false);
-		OffButton.press(false);
-		serialSetSpeedButton.press(false);
-		Number0.press(false);
-		Number1.press(false);
-		Number2.press(false);
-		Number3.press(false);
-		Number4.press(false);
-		Number5.press(false);
-		Number6.press(false);
-		Number7.press(false);
-		Number8.press(false);
-		Number9.press(false);
-		NumberDelete.press(false);
-	}
+    pressedButton = buttonHitTest(transformTouchPoint(ts.getPoint()));
+    if (verboseMode) { Serial.println("Button HIT!"); }
+    if (pressedButton != NULL)
+      pressedButton->press(true);
+  }
+  else {
+    if (pressedButton != NULL) {
+      if (verboseMode) { Serial.println("un-pressing a button"); }
+      pressedButton->press(false);
+      pressedButton = NULL;
+    }
+  }
 
-
-	if (OnButton.justReleased() || OffButton.justReleased()) {
+	if (OnButton.justPressed() || OffButton.justPressed()) {
+		// Button toggles on/off
 		if (verboseMode) { Serial.println("You touched the button"); }
-		OnorOff = !OnorOff;
-		checkOperationStatus();
-		count = 0;
-		CountingUp = true;
+      turnOnOrOff(!OnorOff);  
 	}
 	else if (OnorOff) {
 		if (CountingUp) {
@@ -307,9 +352,12 @@ void loop() {
 	}
 	else if (serialSetSpeedButton.justPressed())
 	{
-		serialDelay = tempSerialDelay;
-		drawSpeedMeter();
+    setSpeed(tempSerialDelay);
 		if (verboseMode) { Serial.println("Set the speed to what user inputed"); }
+
+    // Reset for next time
+    tempSerialDelay = 0;
+    drawTempSpeed();
 	}
 	else if (Number0.justPressed()) {
 		tempSerialDelay = tempSerialDelay * 10 + 0;
@@ -356,44 +404,4 @@ void loop() {
 		drawTempSpeed();
 		if (verboseMode) { Serial.println("Deleted Temp Serial Speed, Reset to 0"); }
 	}
-
-	//This is the old button detection system I wrote before I learned the library already has button support.
-	/*if (ts.touched()) {
-		// Retrieve a point
-		TS_Point p = ts.getPoint();
-		// rotate coordinate system
-		// flip it around to match the screen.
-		//p.x = map(p.x, 0, 240, 240, 0);
-		p.y = map(p.y, 0, 320, 320, 0);
-		if (verboseMode) {
-			Serial.print("X: ");
-			Serial.print(p.x);
-			Serial.print(", ");
-			Serial.print("Y: ");
-			Serial.print(p.y);
-			Serial.println();
-		}
-		if (p.x <= 120 && p.y <= 120) {
-			OnStatus = !OnStatus;
-			checkOnStatus();
-			OnStatusRepeat = false;
-		}
-		else if (p.x >= 0 && p.x <= 120 && p.y >= 200 && p.y <= 320) {
-			SerialSpeedStatus = !SerialSpeedStatus;
-			checkSerialSpeedStatus();
-			SerialSpeedStatusRepeat = false;
-		}
-	}
-	if (OnStatus) {
-		int i = 0;
-		for (i = 0; i < 100; i++) {
-			Serial.println(i);
-			delay(serialDelay);
-		}
-		for (i = 100; i > 0; i--) {
-			Serial.println(i);
-			delay(serialDelay);
-		}
-	}*/
-
 }
